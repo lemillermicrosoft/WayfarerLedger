@@ -5,7 +5,7 @@
 ## Version: 0.1.0-alpha
 ## SavedVariables: WayfarerLedgerDB
 ## SavedVariablesPerCharacter: WayfarerLedgerCharDB
-## X-Curse-Project-ID: @curse-project-id@
+## X-Curse-Project-ID: 1719917
 
 Core.lua
 Codec.lua
