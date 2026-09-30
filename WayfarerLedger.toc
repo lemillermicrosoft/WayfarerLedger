@@ -2,7 +2,7 @@
 ## Title: Wayfarer Ledger
 ## Notes: A private, local notebook for remembering players you meet.
 ## Author: Wayfarer Ledger contributors
-## Version: 0.1.0-alpha
+## Version: 0.2.0-rc.1
 ## SavedVariables: WayfarerLedgerDB
 ## SavedVariablesPerCharacter: WayfarerLedgerCharDB
 ## X-Curse-Project-ID: 1719917

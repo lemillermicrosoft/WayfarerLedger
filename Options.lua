@@ -36,7 +36,8 @@ end
 
 local function savePatterns(edit)
     local patterns, seen = {}, {}
-    local text = edit:GetText() or ""
+    local text = edit:GetText()
+    if WL:IsSecretValue(text) or type(text) ~= "string" then return end
     for line in text:gmatch("[^\r\n]+") do
         local clean = WL:CleanText(line, 80)
         local folded = clean and clean:lower()
@@ -58,14 +59,16 @@ local function createOptions()
     appearanceChoice(panel, "blizzard", "Blizzard / native", 20)
     appearanceChoice(panel, "bronze", "Bronze / custom", 205)
 
-    checkbox(panel, "Automatically remember party and raid members", "Uses only the visible group roster.", -152, function() return WayfarerLedgerDB.options.recordParties end, function(v) WayfarerLedgerDB.options.recordParties = v end)
-    checkbox(panel, "Show ‘met before’ details in player tooltips", "Adds a quiet local tooltip line.", -184, function() return WayfarerLedgerDB.options.tooltip end, function(v) WayfarerLedgerDB.options.tooltip = v end)
-    checkbox(panel, "Notify once per session when targeting someone met before", "Off by default; never sends a message to others.", -216, function() return WayfarerLedgerDB.options.notifyTarget end, function(v) WayfarerLedgerDB.options.notifyTarget = v end)
-    checkbox(panel, "Locally hide chat from known players whose recorded guild matches a pattern", "Optional assistance only. It affects your chat view, relies on your local ledger, and makes no public claim.", -248, function() return WayfarerLedgerDB.options.muteChat end, function(v) WayfarerLedgerDB.options.muteChat = v end)
+    checkbox(panel, "Automatically remember party members", "Uses only the visible party roster.", -152, function() return WayfarerLedgerDB.options.recordParties end, function(v) WayfarerLedgerDB.options.recordParties = v end)
+    checkbox(panel, "Automatically remember raid members", "Uses only the visible raid roster.", -184, function() return WayfarerLedgerDB.options.recordRaid end, function(v) WayfarerLedgerDB.options.recordRaid = v end)
+    checkbox(panel, "Show ‘met before’ details in player tooltips", "Adds a quiet local tooltip line.", -216, function() return WayfarerLedgerDB.options.tooltip end, function(v) WayfarerLedgerDB.options.tooltip = v end)
+    checkbox(panel, "Include private note text in tooltips", "Off by default to reduce shoulder-surfing risk.", -248, function() return WayfarerLedgerDB.options.tooltipNotes end, function(v) WayfarerLedgerDB.options.tooltipNotes = v end)
+    checkbox(panel, "Notify once per session when targeting someone met before", "Off by default; never sends a message to others.", -280, function() return WayfarerLedgerDB.options.notifyTarget end, function(v) WayfarerLedgerDB.options.notifyTarget = v end)
+    checkbox(panel, "Locally hide chat from known players whose recorded guild matches a pattern", "Optional assistance only. It affects your chat view, relies on your local ledger, and makes no public claim.", -312, function() return WayfarerLedgerDB.options.muteChat end, function(v) WayfarerLedgerDB.options.muteChat = v end)
 
-    local patternTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); patternTitle:SetPoint("TOPLEFT", 20, -296); patternTitle:SetText("Guild name patterns (one literal, case-insensitive fragment per line)")
-    local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT", patternTitle, "BOTTOMLEFT", 0, -8); setSize(scroll, 430, 145)
-    local edit = CreateFrame("EditBox", nil, scroll); edit:SetMultiLine(true); edit:SetAutoFocus(false); edit:SetFontObject("ChatFontNormal"); edit:SetWidth(405); edit:SetHeight(145); edit:SetMaxLetters(4096); scroll:SetScrollChild(edit); panel.patternEdit = edit
+    local patternTitle = panel:CreateFontString(nil, "ARTWORK", "GameFontNormal"); patternTitle:SetPoint("TOPLEFT", 20, -360); patternTitle:SetText("Guild name patterns (one literal, case-insensitive fragment per line)")
+    local scroll = CreateFrame("ScrollFrame", nil, panel, "UIPanelScrollFrameTemplate"); scroll:SetPoint("TOPLEFT", patternTitle, "BOTTOMLEFT", 0, -8); setSize(scroll, 430, 105)
+    local edit = CreateFrame("EditBox", nil, scroll); edit:SetMultiLine(true); edit:SetAutoFocus(false); edit:SetFontObject("ChatFontNormal"); edit:SetWidth(405); edit:SetHeight(105); edit:SetMaxLetters(4096); scroll:SetScrollChild(edit); panel.patternEdit = edit
     local save = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); setSize(save, 120, 25); save:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -10); save:SetText("Save patterns"); save:SetScript("OnClick", function() savePatterns(edit) end)
     local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"); hint:SetPoint("LEFT", save, "RIGHT", 10, 0); hint:SetText("Patterns are private and never broadcast.")
     local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); setSize(reset, 150, 25); reset:SetPoint("TOPLEFT", save, "BOTTOMLEFT", 0, -12); reset:SetText("Reset window position"); reset:SetScript("OnClick", function() WL:ResetWindowPosition() end)

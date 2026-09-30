@@ -1,11 +1,11 @@
 $ErrorActionPreference = 'Stop'
 $root = Split-Path -Parent $MyInvocation.MyCommand.Path
-$version = '0.1.0-alpha'
+$version = '0.2.0-rc.1'
 $dist = Join-Path $root 'dist'
 $out = Join-Path $dist "WayfarerLedger-$version.zip"
 New-Item -ItemType Directory -Force -Path $dist | Out-Null
 if (Test-Path $out) { Remove-Item $out }
-$files = @('WayfarerLedger.toc','Core.lua','Codec.lua','UI.lua','Options.lua','README.md','CHANGELOG.md','LICENSE','PREFLIGHT.md')
+$files = @('WayfarerLedger.toc','Core.lua','Codec.lua','UI.lua','Options.lua','README.md','CHANGELOG.md','PRIVACY.md','TESTING.md','LICENSE','PREFLIGHT.md')
 Add-Type -AssemblyName System.IO.Compression
 $stream = [System.IO.File]::Open($out, [System.IO.FileMode]::CreateNew)
 try {

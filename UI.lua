@@ -5,6 +5,9 @@ local markerColors = { positive = "|cFF62C97B", neutral = "|cFFD2B48C", caution 
 local ROWS, ROW_HEIGHT = 13, 27
 local frame, selectedKey, visibleRecords
 local skinnedFrames = {}
+local sortLabels = { recent = "Recent", name = "Name", count = "Met count" }
+local filterOrder = { "all", "positive", "neutral", "caution" }
+local sortOrder = { "recent", "name", "count" }
 
 local function selectedScope() return WL:GetScope() end
 local function store() return WL:GetStore(selectedScope()) end
@@ -70,7 +73,7 @@ end
 local function currentRecord() return selectedKey and store()[selectedKey] end
 
 local function safeFiniteNumber(value)
-    return type(value) == "number" and not WL:IsSecretValue(value) and value == value and math.abs(value) < 100000
+    return not WL:IsSecretValue(value) and type(value) == "number" and value == value and math.abs(value) < 100000
 end
 
 local function restorePosition()
@@ -111,15 +114,36 @@ local function saveEditor()
     }, selectedScope())
 end
 
+local function recentEncounterText(record)
+    local lines = {}
+    for index, encounter in ipairs(record.encounters or {}) do
+        if index > 3 then break end
+        lines[#lines + 1] = (encounter.kind or "other") .. " · " .. formatSeen(encounter.at) .. " · " .. (encounter.context or "Unknown")
+    end
+    return #lines > 0 and table.concat(lines, "\n") or "No encounter details available"
+end
+
+local function recentTimelineText()
+    local lines = {}
+    for index, session in ipairs(WL:GetTimeline(selectedScope())) do
+        if index > 4 then break end
+        lines[#lines + 1] = formatSeen(session.started) .. " · " .. (session.kind or "party") .. " · " .. (session.context or "Unknown") .. " · " .. #(session.members or {}) .. " saved"
+    end
+    return #lines > 0 and table.concat(lines, "\n") or "No party or raid sessions recorded yet."
+end
+
 local function loadEditor()
     local record = currentRecord()
     setVisible(frame.emptyTitle, not record)
     setVisible(frame.emptyText, not record)
     setVisible(frame.emptyExamples, not record)
     setVisible(frame.editor, record ~= nil)
-    if not record then return end
+    if not record then
+        frame.emptyExamples:SetText("Recent group timeline\n" .. recentTimelineText() .. "\n\nStarter ideas (not saved): helpful crafter · reliable tank · roleplayer · friend\nEverything remains local unless you copy an export.")
+        return
+    end
     frame.nameText:SetText(record.name or selectedKey)
-    frame.metaText:SetText((record.guild and ("<" .. record.guild .. "> · ") or "") .. "Last seen " .. formatSeen(record.lastSeen) .. "\n" .. (record.context or "Unknown context"))
+    frame.metaText:SetText((record.guild and ("<" .. record.guild .. "> · ") or "") .. "Last seen " .. formatSeen(record.lastSeen) .. " · Met " .. (tonumber(record.metCount) or 0) .. " time(s)\n" .. recentEncounterText(record))
     frame.tagsBox:SetText(record.tags or "")
     frame.noteBox:SetText(record.note or "")
     frame.marker = WL.MARKERS[record.marker] and record.marker or "neutral"
@@ -133,11 +157,22 @@ local function refresh()
     local query = WL:CleanText(frame.search:GetText(), 100)
     query = query and query:lower() or ""
     visibleRecords = {}
+    local markerFilter = WayfarerLedgerDB.options.markerFilter or "all"
     for key, record in pairs(store()) do
         local haystack = table.concat({ key, record.name or "", record.guild or "", record.tags or "", record.note or "", record.context or "" }, " "):lower()
-        if query == "" or haystack:find(query, 1, true) then visibleRecords[#visibleRecords + 1] = record end
+        if (markerFilter == "all" or record.marker == markerFilter) and (query == "" or haystack:find(query, 1, true)) then visibleRecords[#visibleRecords + 1] = record end
     end
-    table.sort(visibleRecords, function(a, b) return (tonumber(a.lastSeen) or 0) > (tonumber(b.lastSeen) or 0) end)
+    local sortMode = WayfarerLedgerDB.options.sort or "recent"
+    table.sort(visibleRecords, function(a, b)
+        if sortMode == "name" then return (a.name or a.key):lower() < (b.name or b.key):lower() end
+        if sortMode == "count" then
+            local ac, bc = tonumber(a.metCount) or 0, tonumber(b.metCount) or 0
+            if ac ~= bc then return ac > bc end
+        end
+        local at, bt = tonumber(a.lastSeen) or 0, tonumber(b.lastSeen) or 0
+        if at ~= bt then return at > bt end
+        return (a.key or "") < (b.key or "")
+    end)
     FauxScrollFrame_Update(frame.scroll, #visibleRecords, ROWS, ROW_HEIGHT)
     local offset = FauxScrollFrame_GetOffset(frame.scroll)
     for index, row in ipairs(frame.rows) do
@@ -152,6 +187,8 @@ local function refresh()
         else row:Hide() end
     end
     frame.count:SetText(#visibleRecords .. " player" .. (#visibleRecords == 1 and "" or "s") .. " · " .. selectedScope())
+    if frame.filterButton then frame.filterButton:SetText("Filter: " .. (markerFilter == "all" and "All" or WL.MARKERS[markerFilter])) end
+    if frame.sortButton then frame.sortButton:SetText("Sort: " .. (sortLabels[sortMode] or "Recent")) end
     loadEditor()
 end
 
@@ -178,13 +215,16 @@ local function createTransferDialog()
     scroll:SetScrollChild(edit); dialog.edit = edit
     local export = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(export, 100, 24); export:SetPoint("BOTTOMLEFT", 24, 20); export:SetText("Export all")
     export:SetScript("OnClick", function() edit:SetText(WL:ExportData()); edit:HighlightText(); edit:SetFocus() end)
-    local import = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(import, 100, 24); import:SetPoint("LEFT", export, "RIGHT", 8, 0); import:SetText("Import")
+    local import = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(import, 82, 24); import:SetPoint("LEFT", export, "RIGHT", 8, 0); import:SetText("Import")
     import:SetScript("OnClick", function()
         local ok, result = WL:ImportData(edit:GetText())
-        dialog.status:SetText(ok and ("Imported " .. result .. " record(s).") or result)
+        dialog.status:SetText(ok and ("Imported " .. result .. " record(s); backup created.") or result)
         if ok then refresh() end
     end)
-    dialog.status = makeLabel(dialog, ""); dialog.status:SetPoint("LEFT", import, "RIGHT", 12, 0)
+    local backup = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(82, 24); backup:SetPoint("LEFT", import, "RIGHT", 8, 0); backup:SetText("Backup"); backup:SetScript("OnClick", function() dialog.status:SetText(WL:CreateBackup("Manual backup") and "Local backup created." or "Backup could not be created.") end)
+    local restore = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(105, 24); restore:SetPoint("LEFT", backup, "RIGHT", 8, 0); restore:SetText("Restore latest"); restore:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_RESTORE") end)
+    local reset = CreateFrame("Button", nil, dialog, "UIPanelButtonTemplate"); setSize(95, 24); reset:SetPoint("LEFT", restore, "RIGHT", 8, 0); reset:SetText("Reset scope"); reset:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_RESET") end)
+    dialog.status = makeLabel(dialog, ""); dialog.status:SetPoint("BOTTOMLEFT", 24, 4); dialog.status:SetPoint("RIGHT", -24, 0); dialog.status:SetJustifyH("LEFT")
     table.insert(UISpecialFrames, dialog:GetName())
     return dialog
 end
@@ -198,18 +238,30 @@ local function createFrame()
     table.insert(UISpecialFrames, frame:GetName())
 
     local title = makeLabel(frame, "Wayfarer Ledger", 20); title:SetPoint("TOP", 0, -15); frame.titleText = title
-    frame.search = createEditBox(frame); setSize(frame.search, 275, 28); frame.search:SetPoint("TOPLEFT", 22, -48); frame.search:SetMaxLetters(100)
+    frame.search = createEditBox(frame); setSize(frame.search, 190, 28); frame.search:SetPoint("TOPLEFT", 22, -48); frame.search:SetMaxLetters(100)
     frame.search:SetScript("OnTextChanged", refresh)
-    frame.searchLabel = makeLabel(frame, "Search name, guild, tags, notes, or context"); frame.searchLabel:SetPoint("BOTTOMLEFT", frame.search, "TOPLEFT", 4, 2)
-    frame.scopeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(frame.scopeButton, 135, 26); frame.scopeButton:SetPoint("LEFT", frame.search, "RIGHT", 10, 0)
+    frame.searchLabel = makeLabel(frame, "Search local ledger"); frame.searchLabel:SetPoint("BOTTOMLEFT", frame.search, "TOPLEFT", 4, 2)
+    frame.filterButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(frame.filterButton, 95, 26); frame.filterButton:SetPoint("LEFT", frame.search, "RIGHT", 8, 0)
+    frame.filterButton:SetScript("OnClick", function()
+        local current = WayfarerLedgerDB.options.markerFilter or "all"; local nextValue = filterOrder[1]
+        for index, value in ipairs(filterOrder) do if value == current then nextValue = filterOrder[(index % #filterOrder) + 1] break end end
+        WayfarerLedgerDB.options.markerFilter = nextValue; refresh()
+    end)
+    frame.sortButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(frame.sortButton, 100, 26); frame.sortButton:SetPoint("LEFT", frame.filterButton, "RIGHT", 6, 0)
+    frame.sortButton:SetScript("OnClick", function()
+        local current = WayfarerLedgerDB.options.sort or "recent"; local nextValue = sortOrder[1]
+        for index, value in ipairs(sortOrder) do if value == current then nextValue = sortOrder[(index % #sortOrder) + 1] break end end
+        WayfarerLedgerDB.options.sort = nextValue; refresh()
+    end)
+    frame.scopeButton = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(frame.scopeButton, 112, 26); frame.scopeButton:SetPoint("LEFT", frame.sortButton, "RIGHT", 6, 0)
     frame.scopeButton:SetScript("OnClick", function()
-        saveEditor(); WayfarerLedgerDB.options.storageScope = selectedScope() == "account" and "character" or "account"; selectedKey = nil; frame.scopeButton:SetText("Scope: " .. selectedScope()); refresh()
+        saveEditor(); WL:SetScope(selectedScope() == "account" and "character" or "account"); selectedKey = nil; frame.scopeButton:SetText("Scope: " .. selectedScope()); refresh()
     end)
     frame.scopeButton:SetText("Scope: " .. selectedScope())
-    local add = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(add, 110, 26); add:SetPoint("LEFT", frame.scopeButton, "RIGHT", 8, 0); add:SetText("Add target")
+    local add = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(add, 92, 26); add:SetPoint("LEFT", frame.scopeButton, "RIGHT", 6, 0); add:SetText("Add target")
     add:SetScript("OnClick", function() local ok, result = WL:AddUnit("target", "Manual target", true); frame.status:SetText(ok and "Target added locally." or result); if ok then selectedKey = result.key; refresh() end end)
-    local options = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(options, 80, 26); options:SetPoint("LEFT", add, "RIGHT", 8, 0); options:SetText("Options"); options:SetScript("OnClick", function() WL:OpenOptions() end)
-    local transfer = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(transfer, 105, 26); transfer:SetPoint("LEFT", options, "RIGHT", 8, 0); transfer:SetText("Export / Import"); transfer:SetScript("OnClick", function() WL.transferDialog:Show(); WL.transferDialog.edit:SetText(WL:ExportData()) end)
+    local options = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(options, 66, 26); options:SetPoint("LEFT", add, "RIGHT", 6, 0); options:SetText("Options"); options:SetScript("OnClick", function() WL:OpenOptions() end)
+    local transfer = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(transfer, 82, 26); transfer:SetPoint("LEFT", options, "RIGHT", 6, 0); transfer:SetText("Transfer"); transfer:SetScript("OnClick", function() WL.transferDialog:Show(); WL.transferDialog.edit:SetText(WL:ExportData()) end)
 
     local listBg = CreateFrame("Frame", nil, frame); listBg:SetPoint("TOPLEFT", 20, -86); setSize(listBg, 385, 425)
     local listTexture = listBg:CreateTexture(nil, "BACKGROUND"); listTexture:SetAllPoints(); frame.listTexture = listTexture
@@ -229,7 +281,7 @@ local function createFrame()
 
     frame.editor = CreateFrame("Frame", nil, frame); frame.editor:SetPoint("TOPLEFT", 425, -92); frame.editor:SetPoint("BOTTOMRIGHT", -22, 55)
     frame.nameText = makeLabel(frame.editor, "", 18); frame.nameText:SetPoint("TOPLEFT", 0, 0); frame.nameText:SetPoint("RIGHT", 0, 0); frame.nameText:SetJustifyH("LEFT")
-    frame.metaText = makeLabel(frame.editor, ""); frame.metaText:SetPoint("TOPLEFT", frame.nameText, "BOTTOMLEFT", 0, -8); frame.metaText:SetPoint("RIGHT", 0, 0); frame.metaText:SetJustifyH("LEFT")
+    frame.metaText = makeLabel(frame.editor, ""); frame.metaText:SetPoint("TOPLEFT", frame.nameText, "BOTTOMLEFT", 0, -8); frame.metaText:SetPoint("RIGHT", 0, 0); frame.metaText:SetJustifyH("LEFT"); frame.metaText:SetJustifyV("TOP"); frame.metaText:SetHeight(72)
     local tagsLabel = makeLabel(frame.editor, "Tags (comma separated)"); tagsLabel:SetPoint("TOPLEFT", frame.metaText, "BOTTOMLEFT", 0, -18)
     frame.tagsBox = createEditBox(frame.editor); setSize(frame.tagsBox, 390, 28); frame.tagsBox:SetPoint("TOPLEFT", tagsLabel, "BOTTOMLEFT", 0, -3); frame.tagsBox:SetMaxLetters(300)
     frame.markerButton = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(frame.markerButton, 145, 25); frame.markerButton:SetPoint("TOPLEFT", frame.tagsBox, "BOTTOMLEFT", 0, -10)
@@ -238,8 +290,10 @@ local function createFrame()
     local noteLabel = makeLabel(frame.editor, "Private note"); noteLabel:SetPoint("TOPLEFT", frame.markerButton, "BOTTOMLEFT", 0, -14)
     local noteScroll = CreateFrame("ScrollFrame", nil, frame.editor, "UIPanelScrollFrameTemplate"); noteScroll:SetPoint("TOPLEFT", noteLabel, "BOTTOMLEFT", 0, -4); setSize(noteScroll, 370, 180)
     frame.noteBox = createEditBox(noteScroll, true); frame.noteBox:SetWidth(350); frame.noteBox:SetHeight(180); noteScroll:SetScrollChild(frame.noteBox)
-    local save = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(save, 90, 25); save:SetPoint("TOPLEFT", noteScroll, "BOTTOMLEFT", 0, -10); save:SetText("Save"); save:SetScript("OnClick", function() saveEditor(); frame.status:SetText("Saved locally."); refresh() end)
-    local forget = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(forget, 90, 25); forget:SetPoint("LEFT", save, "RIGHT", 8, 0); forget:SetText("Forget"); forget:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_FORGET") end)
+    local save = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(save, 72, 25); save:SetPoint("TOPLEFT", noteScroll, "BOTTOMLEFT", 0, -10); save:SetText("Save"); save:SetScript("OnClick", function() saveEditor(); frame.status:SetText("Saved locally."); refresh() end)
+    local move = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(move, 104, 25); move:SetPoint("LEFT", save, "RIGHT", 8, 0); move:SetText("Move scope"); move:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_MOVE") end)
+    local copy = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(copy, 104, 25); copy:SetPoint("LEFT", move, "RIGHT", 8, 0); copy:SetText("Copy scope"); copy:SetScript("OnClick", function() local destination = selectedScope() == "account" and "character" or "account"; local ok, message = WL:MoveRecord(selectedKey, selectedScope(), destination, true); frame.status:SetText(ok and ("Copied to " .. destination .. ".") or message) end)
+    local forget = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(forget, 72, 25); forget:SetPoint("LEFT", copy, "RIGHT", 8, 0); forget:SetText("Forget"); forget:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_FORGET") end)
     frame.emptyTitle = makeLabel(frame, "Your private travel notebook", 18); frame.emptyTitle:SetPoint("TOPLEFT", 446, -138)
     frame.emptyText = makeLabel(frame, "Target a player and choose Add target, or let Wayfarer Ledger quietly remember visible party and raid members. Select a saved player to add private notes, tags, and a marker. Tooltip reminders can show when you meet them again.")
     frame.emptyText:SetPoint("TOPLEFT", frame.emptyTitle, "BOTTOMLEFT", 0, -14); frame.emptyText:SetWidth(355); frame.emptyText:SetJustifyH("LEFT"); frame.emptyText:SetJustifyV("TOP"); frame.emptyText:SetTextColor(0.78, 0.78, 0.78)
@@ -250,6 +304,18 @@ local function createFrame()
     StaticPopupDialogs.WAYFARER_LEDGER_FORGET = {
         text = "Forget this player from the selected local scope? This cannot be undone.", button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
         OnAccept = function() if selectedKey then WL:Forget(selectedKey, selectedScope()); selectedKey = nil; refresh() end end,
+    }
+    StaticPopupDialogs.WAYFARER_LEDGER_MOVE = {
+        text = "Move this player to the other local scope? Existing destination history will be merged.", button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
+        OnAccept = function() if selectedKey then local from = selectedScope(); local destination = from == "account" and "character" or "account"; local ok, message = WL:MoveRecord(selectedKey, from, destination, false); frame.status:SetText(ok and ("Moved to " .. destination .. ".") or message); selectedKey = nil; refresh() end end,
+    }
+    StaticPopupDialogs.WAYFARER_LEDGER_RESET = {
+        text = "Reset the selected ledger scope? A local backup is created first.", button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
+        OnAccept = function() local ok, message = WL:ResetScope(selectedScope()); if ok then selectedKey = nil end; WL.transferDialog.status:SetText(ok and "Scope reset; backup created." or message); refresh() end,
+    }
+    StaticPopupDialogs.WAYFARER_LEDGER_RESTORE = {
+        text = "Restore the latest local backup by merging it into both scopes?", button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
+        OnAccept = function() local ok, result = WL:RestoreLatestBackup(); WL.transferDialog.status:SetText(ok and ("Restored " .. result .. " record(s).") or result); refresh() end,
     }
     WL.transferDialog = createTransferDialog()
     applyAppearance(WL:GetAppearance())
@@ -277,6 +343,7 @@ local function addTooltip(tooltip)
         tooltip:AddLine("Wayfarer Ledger: " .. color .. (WL.MARKERS[record.marker] or "Neutral") .. "|r", bronze and BRONZE[1] or 1, bronze and BRONZE[2] or 0.82, bronze and BRONZE[3] or 0)
         tooltip:AddLine("Last seen: " .. formatSeen(record.lastSeen) .. (record.context and (" · " .. record.context) or ""), 0.8, 0.8, 0.8, true)
         if record.tags and record.tags ~= "" then tooltip:AddLine("Tags: " .. record.tags, 0.8, 0.8, 0.8, true) end
+        if WayfarerLedgerDB.options.tooltipNotes and record.note and record.note ~= "" then tooltip:AddLine("Private note: " .. record.note, 0.75, 0.75, 0.75, true) end
         tooltip:Show()
     end
 end

@@ -2,35 +2,42 @@
 
 A privacy-first, local social-memory notebook for WoW Forever (`Interface 16001`).
 
-## Alpha features
+## MVP candidate features
 
-- Remembers visible party/raid members and players you explicitly add from your current target.
-- Account-wide or per-character ledgers, selected in the main window.
-- Private notes, tags, positive/neutral/caution markers, guild, last-seen time/context, encounter count, and search.
-- Quiet “met before” player tooltips and an optional once-per-session target notice.
-- User-owned literal guild-name patterns. Matches are shown locally; optional chat hiding only applies to known ledger players. No public accusation or automatic targeting.
-- Plain-text export/import plus per-player forget controls.
-- Configurable Blizzard/native or bronze/custom appearance, applied live; fresh installs default to Blizzard/native.
-- A non-persisted empty-state guide with workflow, marker meanings, privacy notes, and starter tag ideas—without fake records.
-- Defensive handling of secret values via `issecretvalue` when the client provides it; unsafe values are ignored.
+- Quietly remembers visible party/raid members and players explicitly added from the current target.
+- Keeps bounded per-player encounter history plus a recent party/raid timeline and context.
+- Account-wide and per-character ledgers with confirmed copy/move workflows and duplicate-safe merges.
+- Private notes, tags, positive/neutral/caution markers, guild, last-seen context, encounter count, and literal search.
+- Sort by recent encounter, name, or met count; filter by personal marker.
+- Restrained “met before” tooltips and an optional once-per-session target notice. Note text in tooltips is separately opt-in.
+- User-owned, literal, case-insensitive guild fragments. Optional local chat hiding only applies to known ledger players; chat bodies are never read by addon logic or persisted.
+- Transactional, bounded plain-text import/export with canonical name/realm normalization and duplicate merging.
+- Confirmed per-player forget, scope reset, safety backup, and restore flows.
+- Blizzard/native default appearance or optional Bronze/custom styling, applied live.
+- Accessible empty-state onboarding with real recent-group context and no fake records.
 
 ## Privacy boundary
 
-All data is stored in WoW SavedVariables on the local computer. Wayfarer Ledger does **not** create public reputation scores, transmit notes, share accusations, store chat content, automate targeting, or collect real-world information. Export data leaves the addon only when the user copies it.
+Everything stays in WoW SavedVariables on this computer unless the player copies an export. Wayfarer Ledger has no network sharing or telemetry and does **not** store chat content, publish scores, share accusations, automate targeting, or collect real-world information. Potential secret values are rejected before inspection or storage. See [PRIVACY.md](PRIVACY.md).
 
 ## Install
 
-Copy the `WayfarerLedger` directory to:
+Copy the `WayfarerLedger` directory to the appropriate WoW client:
 
-`World of Warcraft/_forever_/Interface/AddOns/WayfarerLedger/`
+`World of Warcraft/_classic_beta_/Interface/AddOns/WayfarerLedger/`
 
-Restart WoW or reload the UI. Open with `/wl`, `/wayfarer`, or Esc → Options → Wayfarer Ledger. Use `/wl add` or **Add target** to manually remember a targeted player. Use `/wl reset` or the Options button to reset the ledger window position.
+For a WoW Forever install, the client directory may instead be `_forever_`. Restart WoW or reload the UI. Open with `/wl`, `/wayfarer`, or Esc → Options → Wayfarer Ledger.
 
-## SavedVariables
+- `/wl add` — explicitly remember the current player target
+- `/wl options` — open options
+- `/wl reset` — reset only the ledger window position
 
-- `WayfarerLedgerDB` — account ledger and settings
-- `WayfarerLedgerCharDB` — current-character ledger
+## Storage and limits
 
-## Status
+- `WayfarerLedgerDB` — account ledger, settings, and up to three local safety backups
+- `WayfarerLedgerCharDB` — current-character ledger and timeline
+- 5,000 imported player records, 1 MiB import text, 40 encounters per player, 100 group sessions per scope
 
-`0.1.0-alpha`: installable and statically validated, but requires in-client testing on WoW Forever. Distribution ZIPs are built into `dist/`.
+## Candidate status
+
+`0.2.0-rc.1` is packaged and statically/data-model validated. It is **not released** pending the in-client checklist in [TESTING.md](TESTING.md). Candidate ZIPs are built into `dist/`.
