@@ -12,7 +12,7 @@ if ($source.Contains('tostring(')) { throw 'Export/import must not stringify unc
 foreach ($unsafe in @('if not UnitExists(', 'if UnitIsUnit(', 'IsInRaid and IsInRaid()')) {
   if ($source.Contains($unsafe)) { throw "Unsafe direct unit boolean branch: $unsafe" }
 }
-if ($toc -notcontains '## X-Curse-Project-ID: @curse-project-id@') { throw 'Missing CurseForge project ID placeholder' }
+if (-not ($toc -match '^## X-Curse-Project-ID:\s*\d+$')) { throw 'Missing numeric CurseForge project ID' }
 if ($toc -match '^## IconTexture: Interface\\Icons') { throw 'Blizzard inventory icon must not be packaged' }
 $opens = ([regex]::Matches($source, '\b(function|if|for|while|repeat|do)\b')).Count
 $closes = ([regex]::Matches($source, '\b(end|until)\b')).Count
