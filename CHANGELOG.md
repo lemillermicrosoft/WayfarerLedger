@@ -6,3 +6,5 @@
 - Added local account and character ledgers, safe group capture, explicit target capture, notes/tags/markers, search, tooltip recall, options, guild-pattern assistance, export/import, and forget controls.
 - Hardened secret-value handling across unit, guild, chat-author, tooltip, and import/export paths.
 - Added persisted scale-aware window positioning, reset controls, guarded Settings registration, and bounded transactional imports.
+- Added a persisted, live-switching Blizzard/native (default) or bronze/custom appearance for addon windows, dialogs, controls, and options.
+- Added polished, non-persisted first-open guidance and starter tag/marker examples without creating or overwriting player data.

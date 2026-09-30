@@ -4,6 +4,7 @@ local BRONZE = { 0.78, 0.55, 0.30 }
 local markerColors = { positive = "|cFF62C97B", neutral = "|cFFD2B48C", caution = "|cFFE08A62" }
 local ROWS, ROW_HEIGHT = 13, 27
 local frame, selectedKey, visibleRecords
+local skinnedFrames = {}
 
 local function selectedScope() return WL:GetScope() end
 local function store() return WL:GetStore(selectedScope()) end
@@ -17,6 +18,47 @@ local function makeLabel(parent, text, size)
     label:SetText(text)
     if size then label:SetFont(STANDARD_TEXT_FONT, size) end
     return label
+end
+
+local function makeColorTexture(parent, layer)
+    local texture = parent:CreateTexture(nil, layer or "BACKGROUND")
+    texture:SetTexture(1, 1, 1, 1)
+    return texture
+end
+
+local function addBronzeSkin(target)
+    local skin = {}
+    skin.fill = makeColorTexture(target, "BACKGROUND"); skin.fill:SetPoint("TOPLEFT", 4, -4); skin.fill:SetPoint("BOTTOMRIGHT", -4, 4)
+    skin.top = makeColorTexture(target, "BORDER"); skin.top:SetPoint("TOPLEFT", 4, -4); skin.top:SetPoint("TOPRIGHT", -4, -4); skin.top:SetHeight(2)
+    skin.bottom = makeColorTexture(target, "BORDER"); skin.bottom:SetPoint("BOTTOMLEFT", 4, 4); skin.bottom:SetPoint("BOTTOMRIGHT", -4, 4); skin.bottom:SetHeight(2)
+    skin.left = makeColorTexture(target, "BORDER"); skin.left:SetPoint("TOPLEFT", 4, -4); skin.left:SetPoint("BOTTOMLEFT", 4, 4); skin.left:SetWidth(2)
+    skin.right = makeColorTexture(target, "BORDER"); skin.right:SetPoint("TOPRIGHT", -4, -4); skin.right:SetPoint("BOTTOMRIGHT", -4, 4); skin.right:SetWidth(2)
+    target.wayfarerSkin = skin
+    skinnedFrames[#skinnedFrames + 1] = target
+end
+
+local function showSkin(target, shown)
+    local skin = target and target.wayfarerSkin
+    if not skin then return end
+    skin.fill:SetVertexColor(0.055, 0.035, 0.018, 0.94)
+    for _, edge in ipairs({ skin.top, skin.bottom, skin.left, skin.right }) do edge:SetVertexColor(0.62, 0.39, 0.16, 0.95) end
+    for _, texture in pairs(skin) do setVisible(texture, shown) end
+end
+
+local function applyAppearance(appearance)
+    local bronze = appearance == "bronze"
+    for _, target in ipairs(skinnedFrames) do showSkin(target, bronze) end
+    if not frame then return end
+    frame.titleText:SetTextColor(bronze and BRONZE[1] or 1, bronze and BRONZE[2] or 0.82, bronze and BRONZE[3] or 0)
+    frame.status:SetTextColor(bronze and BRONZE[1] or 1, bronze and BRONZE[2] or 1, bronze and BRONZE[3] or 1)
+    frame.patternText:SetTextColor(bronze and 0.9 or 1, bronze and 0.65 or 0.82, bronze and 0.35 or 0)
+    frame.listTexture:SetTexture(bronze and 0.04 or 0.03, bronze and 0.03 or 0.04, bronze and 0.02 or 0.06, bronze and 0.65 or 0.72)
+    for _, row in ipairs(frame.rows) do
+        row.selected:SetTexture(bronze and 0.35 or 0.12, bronze and 0.20 or 0.28, bronze and 0.08 or 0.50, 0.55)
+    end
+    if WL.transferDialog and WL.transferDialog.title then
+        WL.transferDialog.title:SetTextColor(bronze and BRONZE[1] or 1, bronze and BRONZE[2] or 0.82, bronze and BRONZE[3] or 0)
+    end
 end
 
 local function formatSeen(timestamp)
@@ -71,7 +113,9 @@ end
 
 local function loadEditor()
     local record = currentRecord()
+    setVisible(frame.emptyTitle, not record)
     setVisible(frame.emptyText, not record)
+    setVisible(frame.emptyExamples, not record)
     setVisible(frame.editor, record ~= nil)
     if not record then return end
     frame.nameText:SetText(record.name or selectedKey)
@@ -122,6 +166,7 @@ end
 
 local function createTransferDialog()
     local dialog = CreateFrame("Frame", "WayfarerLedgerTransferFrame", UIParent, "UIPanelDialogTemplate")
+    addBronzeSkin(dialog)
     setSize(dialog, 620, 430); dialog:SetPoint("CENTER"); dialog:SetFrameStrata("DIALOG"); dialog:Hide()
     dialog.title = makeLabel(dialog, "Wayfarer Ledger — Export / Import", 16); dialog.title:SetPoint("TOP", 0, -14)
     local help = makeLabel(dialog, "Exports stay local until you copy them. Import merges by player key; it never transmits data.")
@@ -146,12 +191,13 @@ end
 
 local function createFrame()
     frame = CreateFrame("Frame", "WayfarerLedgerFrame", UIParent, "UIPanelDialogTemplate")
+    addBronzeSkin(frame)
     setSize(frame, 850, 570); frame:SetMovable(true); frame:EnableMouse(true)
     restorePosition()
     frame:RegisterForDrag("LeftButton"); frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); savePosition() end)
     table.insert(UISpecialFrames, frame:GetName())
 
-    local title = makeLabel(frame, "Wayfarer Ledger", 20); title:SetTextColor(unpack(BRONZE)); title:SetPoint("TOP", 0, -15)
+    local title = makeLabel(frame, "Wayfarer Ledger", 20); title:SetPoint("TOP", 0, -15); frame.titleText = title
     frame.search = createEditBox(frame); setSize(frame.search, 275, 28); frame.search:SetPoint("TOPLEFT", 22, -48); frame.search:SetMaxLetters(100)
     frame.search:SetScript("OnTextChanged", refresh)
     frame.searchLabel = makeLabel(frame, "Search name, guild, tags, notes, or context"); frame.searchLabel:SetPoint("BOTTOMLEFT", frame.search, "TOPLEFT", 4, 2)
@@ -166,7 +212,7 @@ local function createFrame()
     local transfer = CreateFrame("Button", nil, frame, "UIPanelButtonTemplate"); setSize(transfer, 105, 26); transfer:SetPoint("LEFT", options, "RIGHT", 8, 0); transfer:SetText("Export / Import"); transfer:SetScript("OnClick", function() WL.transferDialog:Show(); WL.transferDialog.edit:SetText(WL:ExportData()) end)
 
     local listBg = CreateFrame("Frame", nil, frame); listBg:SetPoint("TOPLEFT", 20, -86); setSize(listBg, 385, 425)
-    local listTexture = listBg:CreateTexture(nil, "BACKGROUND"); listTexture:SetAllPoints(); listTexture:SetTexture(0.04, 0.03, 0.02, 0.65)
+    local listTexture = listBg:CreateTexture(nil, "BACKGROUND"); listTexture:SetAllPoints(); frame.listTexture = listTexture
     frame.rows = {}
     for index = 1, ROWS do
         local row = CreateFrame("Button", nil, listBg)
@@ -188,24 +234,31 @@ local function createFrame()
     frame.tagsBox = createEditBox(frame.editor); setSize(frame.tagsBox, 390, 28); frame.tagsBox:SetPoint("TOPLEFT", tagsLabel, "BOTTOMLEFT", 0, -3); frame.tagsBox:SetMaxLetters(300)
     frame.markerButton = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(frame.markerButton, 145, 25); frame.markerButton:SetPoint("TOPLEFT", frame.tagsBox, "BOTTOMLEFT", 0, -10)
     frame.markerButton:SetScript("OnClick", function() frame.marker = frame.marker == "neutral" and "positive" or (frame.marker == "positive" and "caution" or "neutral"); frame.markerButton:SetText("Marker: " .. WL.MARKERS[frame.marker]) end)
-    frame.patternText = makeLabel(frame.editor, ""); frame.patternText:SetPoint("LEFT", frame.markerButton, "RIGHT", 10, 0); frame.patternText:SetTextColor(0.9, 0.65, 0.35)
+    frame.patternText = makeLabel(frame.editor, ""); frame.patternText:SetPoint("LEFT", frame.markerButton, "RIGHT", 10, 0)
     local noteLabel = makeLabel(frame.editor, "Private note"); noteLabel:SetPoint("TOPLEFT", frame.markerButton, "BOTTOMLEFT", 0, -14)
     local noteScroll = CreateFrame("ScrollFrame", nil, frame.editor, "UIPanelScrollFrameTemplate"); noteScroll:SetPoint("TOPLEFT", noteLabel, "BOTTOMLEFT", 0, -4); setSize(noteScroll, 370, 180)
     frame.noteBox = createEditBox(noteScroll, true); frame.noteBox:SetWidth(350); frame.noteBox:SetHeight(180); noteScroll:SetScrollChild(frame.noteBox)
     local save = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(save, 90, 25); save:SetPoint("TOPLEFT", noteScroll, "BOTTOMLEFT", 0, -10); save:SetText("Save"); save:SetScript("OnClick", function() saveEditor(); frame.status:SetText("Saved locally."); refresh() end)
     local forget = CreateFrame("Button", nil, frame.editor, "UIPanelButtonTemplate"); setSize(forget, 90, 25); forget:SetPoint("LEFT", save, "RIGHT", 8, 0); forget:SetText("Forget"); forget:SetScript("OnClick", function() StaticPopup_Show("WAYFARER_LEDGER_FORGET") end)
-    frame.emptyText = makeLabel(frame, "Select a player to view or edit your private note."); frame.emptyText:SetPoint("CENTER", 205, 0); frame.emptyText:SetTextColor(0.7, 0.7, 0.7)
-    frame.status = makeLabel(frame, ""); frame.status:SetPoint("BOTTOMLEFT", 24, 20); frame.status:SetTextColor(unpack(BRONZE))
+    frame.emptyTitle = makeLabel(frame, "Your private travel notebook", 18); frame.emptyTitle:SetPoint("TOPLEFT", 446, -138)
+    frame.emptyText = makeLabel(frame, "Target a player and choose Add target, or let Wayfarer Ledger quietly remember visible party and raid members. Select a saved player to add private notes, tags, and a marker. Tooltip reminders can show when you meet them again.")
+    frame.emptyText:SetPoint("TOPLEFT", frame.emptyTitle, "BOTTOMLEFT", 0, -14); frame.emptyText:SetWidth(355); frame.emptyText:SetJustifyH("LEFT"); frame.emptyText:SetJustifyV("TOP"); frame.emptyText:SetTextColor(0.78, 0.78, 0.78)
+    frame.emptyExamples = makeLabel(frame, "Starter ideas (not saved):\nTags — helpful crafter · reliable tank · roleplayer · friend\nMarkers — Positive: good experience · Neutral: context only · Caution: personal reminder\n\nEverything stays in SavedVariables on this computer unless you copy an export.")
+    frame.emptyExamples:SetPoint("TOPLEFT", frame.emptyText, "BOTTOMLEFT", 0, -20); frame.emptyExamples:SetWidth(355); frame.emptyExamples:SetJustifyH("LEFT"); frame.emptyExamples:SetJustifyV("TOP"); frame.emptyExamples:SetTextColor(0.68, 0.68, 0.68)
+    frame.status = makeLabel(frame, ""); frame.status:SetPoint("BOTTOMLEFT", 24, 20)
 
     StaticPopupDialogs.WAYFARER_LEDGER_FORGET = {
         text = "Forget this player from the selected local scope? This cannot be undone.", button1 = YES, button2 = NO, timeout = 0, whileDead = true, hideOnEscape = true,
         OnAccept = function() if selectedKey then WL:Forget(selectedKey, selectedScope()); selectedKey = nil; refresh() end end,
     }
     WL.transferDialog = createTransferDialog()
+    applyAppearance(WL:GetAppearance())
     frame:SetScript("OnShow", refresh)
     frame:SetScript("OnHide", saveEditor)
     WL:RegisterCallback(refresh)
 end
+
+WL:RegisterAppearanceCallback(applyAppearance)
 
 function WL:ToggleLedger()
     if not frame then createFrame() end
@@ -220,7 +273,8 @@ local function addTooltip(tooltip)
     local record = key and WL:GetRecord(key)
     if record then
         local color = markerColors[record.marker] or markerColors.neutral
-        tooltip:AddLine("Wayfarer Ledger: " .. color .. (WL.MARKERS[record.marker] or "Neutral") .. "|r", unpack(BRONZE))
+        local bronze = WL:GetAppearance() == "bronze"
+        tooltip:AddLine("Wayfarer Ledger: " .. color .. (WL.MARKERS[record.marker] or "Neutral") .. "|r", bronze and BRONZE[1] or 1, bronze and BRONZE[2] or 0.82, bronze and BRONZE[3] or 0)
         tooltip:AddLine("Last seen: " .. formatSeen(record.lastSeen) .. (record.context and (" · " .. record.context) or ""), 0.8, 0.8, 0.8, true)
         if record.tags and record.tags ~= "" then tooltip:AddLine("Tags: " .. record.tags, 0.8, 0.8, 0.8, true) end
         tooltip:Show()

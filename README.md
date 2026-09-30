@@ -10,6 +10,8 @@ A privacy-first, local social-memory notebook for WoW Forever (`Interface 16001`
 - Quiet “met before” player tooltips and an optional once-per-session target notice.
 - User-owned literal guild-name patterns. Matches are shown locally; optional chat hiding only applies to known ledger players. No public accusation or automatic targeting.
 - Plain-text export/import plus per-player forget controls.
+- Configurable Blizzard/native or bronze/custom appearance, applied live; fresh installs default to Blizzard/native.
+- A non-persisted empty-state guide with workflow, marker meanings, privacy notes, and starter tag ideas—without fake records.
 - Defensive handling of secret values via `issecretvalue` when the client provides it; unsafe values are ignored.
 
 ## Privacy boundary

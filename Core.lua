@@ -3,7 +3,9 @@ _G.WayfarerLedger = WL
 
 WL.VERSION = "0.1.0-alpha"
 WL.MARKERS = { positive = "Positive", neutral = "Neutral", caution = "Caution" }
+WL.APPEARANCES = { blizzard = "Blizzard / native", bronze = "Bronze / custom" }
 WL.callbacks = {}
+WL.appearanceCallbacks = {}
 WL.seenThisSession = {}
 WL.groupPresence = {}
 
@@ -11,6 +13,7 @@ local defaults = {
     schema = 1,
     players = {},
     options = {
+        appearance = "blizzard",
         storageScope = "account",
         tooltip = true,
         notifyTarget = false,
@@ -69,6 +72,33 @@ function WL:SafeNumberCall(api, ...)
     local ok, value = pcall(api, ...)
     if not ok or type(value) ~= "number" or self:IsSecretValue(value) or value ~= value then return nil end
     return value
+end
+
+function WL:NormalizeAppearance(value)
+    if type(value) ~= "string" or self:IsSecretValue(value) then return "blizzard" end
+    local ok, valid = pcall(function() return value == "blizzard" or value == "bronze" end)
+    return ok and valid and value or "blizzard"
+end
+
+function WL:GetAppearance()
+    local options = WayfarerLedgerDB and WayfarerLedgerDB.options
+    return self:NormalizeAppearance(options and options.appearance)
+end
+
+function WL:RegisterAppearanceCallback(callback)
+    if type(callback) == "function" then self.appearanceCallbacks[#self.appearanceCallbacks + 1] = callback end
+end
+
+function WL:ApplyAppearance()
+    local appearance = self:GetAppearance()
+    for _, callback in ipairs(self.appearanceCallbacks) do pcall(callback, appearance) end
+end
+
+function WL:SetAppearance(value)
+    if not WayfarerLedgerDB or type(WayfarerLedgerDB.options) ~= "table" then return false end
+    WayfarerLedgerDB.options.appearance = self:NormalizeAppearance(value)
+    self:ApplyAppearance()
+    return true
 end
 
 function WL:CleanText(value, maxLength)
@@ -237,10 +267,15 @@ events:SetScript("OnEvent", function(_, event, arg1)
     if event == "ADDON_LOADED" and arg1 == ADDON_NAME then
         WayfarerLedgerDB = type(WayfarerLedgerDB) == "table" and WayfarerLedgerDB or {}
         WayfarerLedgerCharDB = type(WayfarerLedgerCharDB) == "table" and WayfarerLedgerCharDB or {}
+        -- Repair the settings container before filling individual missing defaults.
+        if type(WayfarerLedgerDB.options) ~= "table" or WL:IsSecretValue(WayfarerLedgerDB.options) then WayfarerLedgerDB.options = {} end
         copyDefaults(WayfarerLedgerDB, defaults)
         copyDefaults(WayfarerLedgerCharDB, charDefaults)
+        -- Missing, malformed, and secret values migrate safely to the native default.
+        WayfarerLedgerDB.options.appearance = WL:NormalizeAppearance(WayfarerLedgerDB.options.appearance)
         WL.DB, WL.CharDB = WayfarerLedgerDB, WayfarerLedgerCharDB
         installChatFilters()
+        WL:ApplyAppearance()
         WL:FireChanged()
     elseif event == "PLAYER_LOGIN" or event == "GROUP_ROSTER_UPDATE" then
         WL:RecordGroup()
