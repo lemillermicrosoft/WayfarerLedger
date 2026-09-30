@@ -1,0 +1,13 @@
+## Interface: 16001
+## Title: Wayfarer Ledger
+## Notes: A private, local notebook for remembering players you meet.
+## Author: Wayfarer Ledger contributors
+## Version: 0.1.0-alpha
+## SavedVariables: WayfarerLedgerDB
+## SavedVariablesPerCharacter: WayfarerLedgerCharDB
+## IconTexture: Interface\Icons\INV_Misc_Book_09
+
+Core.lua
+Codec.lua
+UI.lua
+Options.lua
