@@ -17,6 +17,7 @@ local defaults = {
         recordParties = true,
         muteChat = false,
         guildPatterns = {},
+        windowPosition = { x = 0, y = 0 },
     },
 }
 
@@ -37,14 +38,37 @@ local function copyDefaults(target, source)
     end
 end
 
-function WL:IsSafeText(value)
-    if type(value) ~= "string" then return false end
+function WL:IsSecretValue(value)
     if type(issecretvalue) == "function" then
         local ok, secret = pcall(issecretvalue, value)
-        if not ok or secret then return false end
+        if not ok or type(secret) ~= "boolean" or secret then return true end
     end
+    return false
+end
+
+function WL:IsSafeText(value)
+    if type(value) ~= "string" or self:IsSecretValue(value) then return false end
     local ok, length = pcall(string.len, value)
-    return ok and length > 0
+    return ok and type(length) == "number" and length > 0
+end
+
+function WL:SafeBooleanValue(value)
+    if type(value) ~= "boolean" or self:IsSecretValue(value) then return nil end
+    return value
+end
+
+function WL:SafeBooleanCall(api, ...)
+    if type(api) ~= "function" then return nil end
+    local ok, value = pcall(api, ...)
+    if not ok then return nil end
+    return self:SafeBooleanValue(value)
+end
+
+function WL:SafeNumberCall(api, ...)
+    if type(api) ~= "function" then return nil end
+    local ok, value = pcall(api, ...)
+    if not ok or type(value) ~= "number" or self:IsSecretValue(value) or value ~= value then return nil end
+    return value
 end
 
 function WL:CleanText(value, maxLength)
@@ -73,9 +97,12 @@ function WL:NormalizeName(name, realm)
 end
 
 function WL:NameFromUnit(unit)
-    if not UnitExists(unit) or not UnitIsPlayer(unit) or UnitIsUnit(unit, "player") then return nil end
+    local exists = self:SafeBooleanCall(UnitExists, unit)
+    local player = self:SafeBooleanCall(UnitIsPlayer, unit)
+    local selfUnit = self:SafeBooleanCall(UnitIsUnit, unit, "player")
+    if exists ~= true or player ~= true or selfUnit ~= false then return nil end
     local ok, name, realm = pcall(UnitName, unit)
-    if not ok then return nil end
+    if not ok or self:IsSecretValue(name) or self:IsSecretValue(realm) then return nil end
     return self:NormalizeName(name, realm), self:CleanText(name, 80)
 end
 
@@ -107,8 +134,8 @@ local function safeContext()
     local ok, zone = pcall(GetZoneText)
     zone = ok and WL:CleanText(zone, 100) or nil
     if zone then parts[#parts + 1] = zone end
-    local inInstance, instanceType = IsInInstance()
-    if inInstance and WL:IsSafeText(instanceType) then parts[#parts + 1] = instanceType end
+    local okInstance, inInstance, instanceType = pcall(IsInInstance)
+    if okInstance and WL:SafeBooleanValue(inInstance) == true and WL:IsSafeText(instanceType) then parts[#parts + 1] = instanceType end
     return #parts > 0 and table.concat(parts, " · ") or "World"
 end
 
@@ -120,7 +147,7 @@ function WL:AddUnit(unit, context, manual)
     local record = store[key] or { key = key, marker = "neutral", tags = "", note = "", metCount = 0 }
     record.name = displayName or key
     local ok, guild = pcall(GetGuildInfo, unit)
-    guild = ok and self:CleanText(guild, 120) or nil
+    guild = ok and not self:IsSecretValue(guild) and self:CleanText(guild, 120) or nil
     if guild then record.guild = guild end
     record.lastSeen = time()
     record.context = self:CleanText(context, 140) or safeContext()
@@ -133,12 +160,14 @@ end
 
 function WL:RecordGroup()
     if not WayfarerLedgerDB.options.recordParties then return end
-    local raidCount = GetNumRaidMembers and GetNumRaidMembers() or 0
-    local inRaid = (IsInRaid and IsInRaid()) or raidCount > 0
+    local raidCount = self:SafeNumberCall(GetNumRaidMembers) or 0
+    local raidFlag = self:SafeBooleanCall(IsInRaid)
+    local inRaid = raidFlag == true or raidCount > 0
     local prefix = inRaid and "raid" or "party"
     local count
-    if inRaid then count = GetNumGroupMembers and GetNumGroupMembers() or raidCount
-    else count = GetNumSubgroupMembers and GetNumSubgroupMembers() or (GetNumPartyMembers and GetNumPartyMembers() or 0) end
+    if inRaid then count = self:SafeNumberCall(GetNumGroupMembers) or raidCount
+    else count = self:SafeNumberCall(GetNumSubgroupMembers) or self:SafeNumberCall(GetNumPartyMembers) or 0 end
+    count = math.max(0, math.min(40, math.floor(count)))
     local present = {}
     for index = 1, count do
         local unit = prefix .. index
@@ -233,5 +262,8 @@ SlashCmdList.WAYFARERLEDGER = function(message)
         local ok, result = WL:AddUnit("target", "Manual target · " .. safeContext(), true)
         print(ok and "|cFFC69B55Wayfarer Ledger:|r Added current target." or ("|cFFC69B55Wayfarer Ledger:|r " .. result))
     elseif message == "options" and WL.OpenOptions then WL:OpenOptions()
+    elseif message == "reset" and WL.ResetWindowPosition then
+        WL:ResetWindowPosition()
+        print("|cFFC69B55Wayfarer Ledger:|r Window position reset.")
     else WL:ToggleLedger() end
 end

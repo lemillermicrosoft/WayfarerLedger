@@ -22,7 +22,7 @@ Copy the `WayfarerLedger` directory to:
 
 `World of Warcraft/_forever_/Interface/AddOns/WayfarerLedger/`
 
-Restart WoW or reload the UI. Open with `/wl`, `/wayfarer`, or Esc → Options → Wayfarer Ledger. Use `/wl add` or **Add target** to manually remember a targeted player.
+Restart WoW or reload the UI. Open with `/wl`, `/wayfarer`, or Esc → Options → Wayfarer Ledger. Use `/wl add` or **Add target** to manually remember a targeted player. Use `/wl reset` or the Options button to reset the ledger window position.
 
 ## SavedVariables
 
@@ -31,4 +31,4 @@ Restart WoW or reload the UI. Open with `/wl`, `/wayfarer`, or Esc → Options �
 
 ## Status
 
-`0.1.0-alpha`: installable and statically validated, but requires in-client testing on WoW Forever.
+`0.1.0-alpha`: installable and statically validated, but requires in-client testing on WoW Forever. Distribution ZIPs are built into `dist/`.

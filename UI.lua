@@ -27,6 +27,38 @@ end
 
 local function currentRecord() return selectedKey and store()[selectedKey] end
 
+local function safeFiniteNumber(value)
+    return type(value) == "number" and not WL:IsSecretValue(value) and value == value and math.abs(value) < 100000
+end
+
+local function restorePosition()
+    local position = WayfarerLedgerDB.options.windowPosition
+    local x = type(position) == "table" and position.x or 0
+    local y = type(position) == "table" and position.y or 0
+    if not safeFiniteNumber(x) then x = 0 end
+    if not safeFiniteNumber(y) then y = 0 end
+    frame:ClearAllPoints()
+    frame:SetPoint("CENTER", UIParent, "CENTER", math.max(-2000, math.min(2000, x)), math.max(-1200, math.min(1200, y)))
+end
+
+local function savePosition()
+    local ok, frameX, frameY = pcall(frame.GetCenter, frame)
+    local parentOK, parentX, parentY = pcall(UIParent.GetCenter, UIParent)
+    local frameScale = WL:SafeNumberCall(frame.GetEffectiveScale, frame) or 1
+    local parentScale = WL:SafeNumberCall(UIParent.GetEffectiveScale, UIParent) or 1
+    if ok and parentOK and safeFiniteNumber(frameX) and safeFiniteNumber(frameY) and safeFiniteNumber(parentX) and safeFiniteNumber(parentY) and parentScale > 0 then
+        WayfarerLedgerDB.options.windowPosition = {
+            x = math.max(-2000, math.min(2000, (frameX * frameScale - parentX * parentScale) / parentScale)),
+            y = math.max(-1200, math.min(1200, (frameY * frameScale - parentY * parentScale) / parentScale)),
+        }
+    end
+end
+
+function WL:ResetWindowPosition()
+    WayfarerLedgerDB.options.windowPosition = { x = 0, y = 0 }
+    if frame then restorePosition() end
+end
+
 local function saveEditor()
     local record = currentRecord()
     if not record then return end
@@ -114,8 +146,9 @@ end
 
 local function createFrame()
     frame = CreateFrame("Frame", "WayfarerLedgerFrame", UIParent, "UIPanelDialogTemplate")
-    setSize(frame, 850, 570); frame:SetPoint("CENTER"); frame:SetMovable(true); frame:EnableMouse(true)
-    frame:RegisterForDrag("LeftButton"); frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", frame.StopMovingOrSizing)
+    setSize(frame, 850, 570); frame:SetMovable(true); frame:EnableMouse(true)
+    restorePosition()
+    frame:RegisterForDrag("LeftButton"); frame:SetScript("OnDragStart", frame.StartMoving); frame:SetScript("OnDragStop", function(self) self:StopMovingOrSizing(); savePosition() end)
     table.insert(UISpecialFrames, frame:GetName())
 
     local title = makeLabel(frame, "Wayfarer Ledger", 20); title:SetTextColor(unpack(BRONZE)); title:SetPoint("TOP", 0, -15)
@@ -181,8 +214,9 @@ end
 
 local function addTooltip(tooltip)
     if not WayfarerLedgerDB or not WayfarerLedgerDB.options.tooltip then return end
-    local _, unit = tooltip:GetUnit()
-    local key = unit and WL:NameFromUnit(unit)
+    local ok, _, unit = pcall(tooltip.GetUnit, tooltip)
+    if not ok or not WL:IsSafeText(unit) then return end
+    local key = WL:NameFromUnit(unit)
     local record = key and WL:GetRecord(key)
     if record then
         local color = markerColors[record.marker] or markerColors.neutral
@@ -193,8 +227,8 @@ local function addTooltip(tooltip)
     end
 end
 
-if TooltipDataProcessor and Enum and Enum.TooltipDataType then
-    TooltipDataProcessor.AddTooltipPostCall(Enum.TooltipDataType.Unit, addTooltip)
-else
-    GameTooltip:HookScript("OnTooltipSetUnit", addTooltip)
+if TooltipDataProcessor and type(TooltipDataProcessor.AddTooltipPostCall) == "function" and Enum and Enum.TooltipDataType then
+    pcall(TooltipDataProcessor.AddTooltipPostCall, Enum.TooltipDataType.Unit, addTooltip)
+elseif GameTooltip and type(GameTooltip.HookScript) == "function" then
+    pcall(GameTooltip.HookScript, GameTooltip, "OnTooltipSetUnit", addTooltip)
 end

@@ -5,7 +5,7 @@
 ## Version: 0.1.0-alpha
 ## SavedVariables: WayfarerLedgerDB
 ## SavedVariablesPerCharacter: WayfarerLedgerCharDB
-## IconTexture: Interface\Icons\INV_Misc_Book_09
+## X-Curse-Project-ID: @curse-project-id@
 
 Core.lua
 Codec.lua

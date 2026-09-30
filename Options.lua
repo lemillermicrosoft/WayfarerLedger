@@ -44,19 +44,32 @@ local function createOptions()
     local edit = CreateFrame("EditBox", nil, scroll); edit:SetMultiLine(true); edit:SetAutoFocus(false); edit:SetFontObject("ChatFontNormal"); edit:SetWidth(405); edit:SetHeight(145); edit:SetMaxLetters(4096); scroll:SetScrollChild(edit); panel.patternEdit = edit
     local save = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); setSize(save, 120, 25); save:SetPoint("TOPLEFT", scroll, "BOTTOMLEFT", 0, -10); save:SetText("Save patterns"); save:SetScript("OnClick", function() savePatterns(edit) end)
     local hint = panel:CreateFontString(nil, "ARTWORK", "GameFontHighlightSmall"); hint:SetPoint("LEFT", save, "RIGHT", 10, 0); hint:SetText("Patterns are private and never broadcast.")
+    local reset = CreateFrame("Button", nil, panel, "UIPanelButtonTemplate"); setSize(reset, 150, 25); reset:SetPoint("TOPLEFT", save, "BOTTOMLEFT", 0, -12); reset:SetText("Reset window position"); reset:SetScript("OnClick", function() WL:ResetWindowPosition() end)
     panel:SetScript("OnShow", function() edit:SetText(table.concat(WayfarerLedgerDB.options.guildPatterns, "\n")) end)
 
-    if Settings and Settings.RegisterCanvasLayoutCategory then
-        local category = Settings.RegisterCanvasLayoutCategory(panel, panel.name)
-        Settings.RegisterAddOnCategory(category)
-        WL.optionsCategoryID = category:GetID()
-    elseif InterfaceOptions_AddCategory then InterfaceOptions_AddCategory(panel) end
+    local registered = false
+    if Settings and type(Settings.RegisterCanvasLayoutCategory) == "function" and type(Settings.RegisterAddOnCategory) == "function" then
+        local ok, category = pcall(Settings.RegisterCanvasLayoutCategory, panel, panel.name)
+        if ok and category then
+            local added = pcall(Settings.RegisterAddOnCategory, category)
+            local idOK, categoryID = false, nil
+            if type(category.GetID) == "function" then idOK, categoryID = pcall(category.GetID, category) end
+            if added then WL.optionsCategoryID = idOK and categoryID or nil; registered = true end
+        end
+    end
+    if not registered and type(InterfaceOptions_AddCategory) == "function" then pcall(InterfaceOptions_AddCategory, panel) end
 end
 
 function WL:OpenOptions()
     if not panel then createOptions() end
-    if Settings and Settings.OpenToCategory and WL.optionsCategoryID then Settings.OpenToCategory(WL.optionsCategoryID)
-    elseif InterfaceOptionsFrame_OpenToCategory then InterfaceOptionsFrame_OpenToCategory(panel); InterfaceOptionsFrame_OpenToCategory(panel) end
+    if Settings and type(Settings.OpenToCategory) == "function" and WL.optionsCategoryID then
+        local ok = pcall(Settings.OpenToCategory, WL.optionsCategoryID)
+        if ok then return end
+    end
+    if type(InterfaceOptionsFrame_OpenToCategory) == "function" then
+        pcall(InterfaceOptionsFrame_OpenToCategory, panel)
+        pcall(InterfaceOptionsFrame_OpenToCategory, panel)
+    end
 end
 
 local loader = CreateFrame("Frame")
